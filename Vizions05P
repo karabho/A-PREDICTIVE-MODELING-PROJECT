@@ -1,0 +1,61 @@
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
+from sklearn.feature_selection import SelectKBest, f_regression
+from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.metrics import r2_score, mean_squared_error
+
+# Load the dataset into a pandas dataframe
+data = pd.read_csv('path/to/dataset.csv')
+
+# Preprocess the data by imputing missing values, scaling, encoding categorical variables, and engineering new features
+data['missing_var_1'] = data['missing_var_1'].fillna(data['missing_var_1'].mean()) # Impute missing values
+cat_cols = ['categorical_variable_1', 'categorical_variable_2']
+num_cols = ['numerical_variable_1', 'numerical_variable_2']
+scaler = StandardScaler()
+data[num_cols] = scaler.fit_transform(data[num_cols])
+data = pd.get_dummies(data, columns=cat_cols)
+poly_features = PolynomialFeatures(degree=2, include_bias=False)
+data_poly = pd.DataFrame(poly_features.fit_transform(data[num_cols]), columns=poly_features.get_feature_names(num_cols))
+data = pd.concat([data.drop(num_cols, axis=1), data_poly], axis=1)
+
+# Select the most important features using univariate feature selection
+X = data.drop('target_variable_name', axis=1) # Drop the target variable from the input features
+y = data['target_variable_name'] # Set the target variable as the output
+selector = SelectKBest(f_regression, k=20)
+X_new = selector.fit_transform(X, y)
+selected_features = X.columns[selector.get_support()]
+
+# Split the dataset into training and testing data
+X_train, X_test, y_train, y_test = train_test_split(X_new, y, test_size=0.2, random_state=42)
+
+# Create a gradient boosting regression model and perform cross-validation to evaluate its performance
+model = GradientBoostingRegressor()
+scores = cross_val_score(model, X_train, y_train, cv=5, scoring='r2')
+print('Cross-validation scores:', scores)
+print('Mean R-squared:', np.mean(scores))
+
+# Tune the hyperparameters of the model using grid search
+param_grid = {
+    'n_estimators': [100, 200, 500],
+    'max_depth': [5, 10, 20],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'learning_rate': [0.01, 0.1, 1]
+}
+grid_search = GridSearchCV(model, param_grid=param_grid, cv=5, scoring='r2')
+grid_search.fit(X_train, y_train)
+print('Best parameters:', grid_search.best_params_)
+
+# Fit the tuned model to the training data and make predictions on the test data
+model = GradientBoostingRegressor(**grid_search.best_params_)
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+
+# Evaluate the model's performance using R-squared and mean squared error
+r2 = r2_score(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+print('R-squared:', r2)
+print('Mean squared error:', mse)
